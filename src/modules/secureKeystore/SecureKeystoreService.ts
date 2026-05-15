@@ -1,40 +1,86 @@
-import {saveWalletKeyAlias, getWalletKeyAlias} from '../../storage/walletStorage';
+import * as Keychain from 'react-native-keychain';
 
-const createMockSignature = (payload: string, keyAlias: string) => {
-  const timestamp = Date.now();
-
-  return `mock_signature_${payload}_${keyAlias}_${timestamp}`;
+export type WalletKeyPairResult = {
+  status: 'KEY_GENERATED';
+  keyAlias: string;
+  publicKey: string;
+  createdAt: string;
 };
 
-export class SecureKeystoreService {
-  static async generateKeyPair() {
-    const keyAlias = `wallet-key-${Date.now()}`;
+export type WalletSignatureResult = {
+  keyAlias: string;
+  payload: string;
+  signature: string;
+  signedAt: string;
+};
 
-    saveWalletKeyAlias(keyAlias);
+const WALLET_KEYCHAIN_SERVICE = 'mini-vc-wallet-secure-keystore';
+const WALLET_KEY_USERNAME = 'mini-vc-wallet-key';
+
+function createMockPublicKey(keyAlias: string): string {
+  return `mock_public_key_${keyAlias}`;
+}
+
+function createMockSignature(payload: string, keyAlias: string): string {
+  return `mock_signature_${payload}_${keyAlias}_${Date.now()}`;
+}
+
+async function saveWalletKeyAlias(keyAlias: string): Promise<void> {
+  await Keychain.setGenericPassword(WALLET_KEY_USERNAME, keyAlias, {
+    service: WALLET_KEYCHAIN_SERVICE,
+  });
+}
+
+async function getStoredWalletKeyAlias(): Promise<string | null> {
+  const credentials = await Keychain.getGenericPassword({
+    service: WALLET_KEYCHAIN_SERVICE,
+  });
+
+  if (!credentials) {
+    return null;
+  }
+
+  return credentials.password;
+}
+
+export const SecureKeystoreService = {
+  async generateKeyPair(): Promise<WalletKeyPairResult> {
+    const existingKeyAlias = await getStoredWalletKeyAlias();
+
+    const keyAlias = existingKeyAlias ?? `wallet-key-${Date.now()}`;
+
+    await saveWalletKeyAlias(keyAlias);
 
     return {
-      keyAlias,
       status: 'KEY_GENERATED',
+      keyAlias,
+      publicKey: createMockPublicKey(keyAlias),
+      createdAt: new Date().toISOString(),
     };
-  }
+  },
 
-  static async getKeyAlias() {
-    return getWalletKeyAlias();
-  }
+  async getWalletKeyAlias(): Promise<string | null> {
+    return getStoredWalletKeyAlias();
+  },
 
-  static async signPayload(payload: string) {
-    const keyAlias = getWalletKeyAlias();
+  async signPayload(payload: string): Promise<WalletSignatureResult> {
+    const keyAlias = await getStoredWalletKeyAlias();
 
     if (!keyAlias) {
-      throw new Error('Wallet key not found');
+      throw new Error('Wallet key pair is not generated');
     }
-
-    const signature = createMockSignature(payload, keyAlias);
 
     return {
       keyAlias,
       payload,
-      signature,
+      signature: createMockSignature(payload, keyAlias),
+      signedAt: new Date().toISOString(),
     };
-  }
-}
+  },
+
+  async clearWalletKey(): Promise<void> {
+    await Keychain.resetGenericPassword({
+      service: WALLET_KEYCHAIN_SERVICE,
+    });
+  },
+};
