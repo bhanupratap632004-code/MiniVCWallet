@@ -16,13 +16,37 @@ export type SignPayloadResult = {
 const WALLET_KEY_SERVICE = 'mini-vc-wallet-key-service';
 const WALLET_KEY_USERNAME = 'wallet-key-alias';
 
+let fallbackWalletKeyAlias: string | null = null;
+
+function isKeychainAvailable() {
+  return (
+    Keychain &&
+    typeof Keychain.getGenericPassword === 'function' &&
+    typeof Keychain.setGenericPassword === 'function' &&
+    typeof Keychain.resetGenericPassword === 'function'
+  );
+}
+
 export const SecureKeystoreService = {
-  /**
-   * Generates a wallet key alias and stores it in native secure storage.
-   * iOS: Keychain
-   * Android: Encrypted secure storage through react-native-keychain
-   */
   async generateKeyPair(): Promise<KeyGenerationResult> {
+    if (!isKeychainAvailable()) {
+      if (fallbackWalletKeyAlias) {
+        return {
+          status: 'KEY_ALREADY_EXISTS',
+          keyAlias: fallbackWalletKeyAlias,
+          createdAt: new Date().toISOString(),
+        };
+      }
+
+      fallbackWalletKeyAlias = `wallet-key-${Date.now()}`;
+
+      return {
+        status: 'KEY_GENERATED',
+        keyAlias: fallbackWalletKeyAlias,
+        createdAt: new Date().toISOString(),
+      };
+    }
+
     const existingKey = await Keychain.getGenericPassword({
       service: WALLET_KEY_SERVICE,
     });
@@ -48,11 +72,15 @@ export const SecureKeystoreService = {
     };
   },
 
-  /**
-   * Returns the stored wallet key alias.
-   * If no key exists, it creates one automatically.
-   */
   async getWalletKeyAlias(): Promise<string> {
+    if (!isKeychainAvailable()) {
+      if (!fallbackWalletKeyAlias) {
+        fallbackWalletKeyAlias = `wallet-key-${Date.now()}`;
+      }
+
+      return fallbackWalletKeyAlias;
+    }
+
     const existingKey = await Keychain.getGenericPassword({
       service: WALLET_KEY_SERVICE,
     });
@@ -65,10 +93,6 @@ export const SecureKeystoreService = {
     return generatedKey.keyAlias;
   },
 
-  /**
-   * Mock signing method.
-   * Real cryptographic signing can be added later.
-   */
   async signPayload(payload: string): Promise<SignPayloadResult> {
     const keyAlias = await this.getWalletKeyAlias();
     const signedAt = new Date().toISOString();
@@ -81,13 +105,13 @@ export const SecureKeystoreService = {
     };
   },
 
-  /**
-   * Clears the stored wallet key.
-   * Useful for testing reset flow.
-   */
   async clearWalletKey(): Promise<void> {
-    await Keychain.resetGenericPassword({
-      service: WALLET_KEY_SERVICE,
-    });
+    fallbackWalletKeyAlias = null;
+
+    if (isKeychainAvailable()) {
+      await Keychain.resetGenericPassword({
+        service: WALLET_KEY_SERVICE,
+      });
+    }
   },
 };

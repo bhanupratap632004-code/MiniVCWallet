@@ -1,56 +1,37 @@
 /* eslint-env jest */
 
 jest.mock('react-native-mmkv', () => {
-  class MockMMKV {
-    constructor() {
-      this.store = {};
-    }
-
-    set(key, value) {
-      this.store[key] = String(value);
-    }
-
-    getString(key) {
-      return this.store[key];
-    }
-
-    delete(key) {
-      delete this.store[key];
-    }
-
-    remove(key) {
-      delete this.store[key];
-    }
-
-    clearAll() {
-      this.store = {};
-    }
-  }
+  const storage = new Map();
 
   return {
-    MMKV: MockMMKV,
-    createMMKV: () => new MockMMKV(),
-  };
-});
-jest.mock('react-native-keychain', () => {
-  let storedCredentials = null;
-
-  return {
-    setGenericPassword: jest.fn(async (username, password) => {
-      storedCredentials = {
-        username,
-        password,
-      };
-      return true;
-    }),
-
-    getGenericPassword: jest.fn(async () => {
-      return storedCredentials;
-    }),
-
-    resetGenericPassword: jest.fn(async () => {
-      storedCredentials = null;
-      return true;
+    createMMKV: () => ({
+      set: jest.fn((key, value) => storage.set(key, value)),
+      getString: jest.fn(key => storage.get(key)),
+      remove: jest.fn(key => storage.delete(key)),
+      clearAll: jest.fn(() => storage.clear()),
     }),
   };
 });
+
+jest.mock('react-native-keychain', () => ({
+  setGenericPassword: jest.fn(() => Promise.resolve(true)),
+  getGenericPassword: jest.fn(() =>
+    Promise.resolve({
+      username: 'wallet-key',
+      password: 'wallet-key-test-alias',
+    }),
+  ),
+  resetGenericPassword: jest.fn(() => Promise.resolve(true)),
+  ACCESSIBLE: {
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'WHEN_UNLOCKED_THIS_DEVICE_ONLY',
+  },
+  SECURITY_LEVEL: {
+    SECURE_HARDWARE: 'SECURE_HARDWARE',
+    SECURE_SOFTWARE: 'SECURE_SOFTWARE',
+  },
+}));
+
+const {TextEncoder, TextDecoder} = require('text-encoding');
+
+global.TextEncoder = TextEncoder;
+global.TextDecoder = TextDecoder;

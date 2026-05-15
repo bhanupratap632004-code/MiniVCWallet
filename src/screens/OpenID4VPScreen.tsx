@@ -4,6 +4,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -14,7 +15,22 @@ import {
   VerifiablePresentationToken,
 } from '../modules/openid4vp/OpenID4VPService';
 
-import {sampleCredential} from '../modules/credential/sampleCredential';
+import {VerifiableCredential} from '../types/credential';
+
+const sampleCredential: VerifiableCredential = {
+  id: 'urn:uuid:intern-credential-001',
+  type: ['VerifiableCredential', 'InternCredential'],
+  issuer: 'did:example:issuer001',
+  issuanceDate: '2026-05-15T00:00:00Z',
+  expirationDate: '2027-05-15T00:00:00Z',
+  credentialSubject: {
+    id: 'did:example:intern001',
+    employeeId: 'EMP-001',
+    name: 'Demo Intern',
+    role: 'React Native Intern',
+    organization: 'Mini VC Wallet Demo',
+  },
+};
 
 export default function OpenID4VPScreen() {
   const [request, setRequest] = useState<OpenID4VPVerifierRequest | null>(null);
@@ -22,26 +38,51 @@ export default function OpenID4VPScreen() {
     null,
   );
 
+  const [requestUrl, setRequestUrl] = useState(
+    'openid4vp://authorize?client_id=demo-verifier-app&nonce=12345&presentation_definition=identity&redirect_uri=mini-vc-wallet://openid4vp/callback',
+  );
+
   const handleLoadVerifierRequest = () => {
     try {
-      const mockRequest = OpenID4VPService.createMockVerifierRequest();
-
-      const parsedRequest =
-        OpenID4VPService.parseVerifierRequest(mockRequest);
+      const parsedRequest = OpenID4VPService.parseVerifierRequest(
+        'openid4vp://authorize?client_id=demo-verifier-app&nonce=12345&presentation_definition=identity&redirect_uri=mini-vc-wallet://openid4vp/callback',
+      );
 
       setRequest(parsedRequest);
       setVpToken(null);
 
       Alert.alert('Success', 'Mock verifier request loaded successfully');
-    } catch {
+    } catch (error) {
+      console.log('Load verifier request error:', error);
       Alert.alert('Error', 'Failed to load verifier request');
+    }
+  };
+
+  const handleParsePastedRequest = () => {
+    try {
+      if (!requestUrl.trim()) {
+        Alert.alert('Error', 'Please paste an OpenID4VP request URL first');
+        return;
+      }
+
+      const parsedRequest = OpenID4VPService.parseVerifierRequest(
+        requestUrl.trim(),
+      );
+
+      setRequest(parsedRequest);
+      setVpToken(null);
+
+      Alert.alert('Success', 'OpenID4VP request parsed successfully');
+    } catch (error) {
+      console.log('Parse pasted request error:', error);
+      Alert.alert('Error', 'Failed to parse OpenID4VP request URL');
     }
   };
 
   const handleCreateSignedVPToken = async () => {
     try {
       if (!request) {
-        Alert.alert('Error', 'Please load verifier request first');
+        Alert.alert('Error', 'Please load or parse a verifier request first');
         return;
       }
 
@@ -53,13 +94,14 @@ export default function OpenID4VPScreen() {
       setVpToken(token);
 
       Alert.alert('Success', 'Signed VP token created successfully');
-    } catch {
+    } catch (error) {
+      console.log('Create signed VP token error:', error);
       Alert.alert('Error', 'Failed to create signed VP token');
     }
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>OpenID4VP Flow</Text>
 
       <Text style={styles.subtitle}>
@@ -67,20 +109,40 @@ export default function OpenID4VPScreen() {
       </Text>
 
       <TouchableOpacity
-        style={styles.button}
+        style={styles.primaryButton}
         onPress={handleLoadVerifierRequest}>
-        <Text style={styles.buttonText}>Load Mock Verifier Request</Text>
+        <Text style={styles.primaryButtonText}>Load Mock Verifier Request</Text>
       </TouchableOpacity>
 
+      <View style={styles.inputCard}>
+        <Text style={styles.sectionTitle}>Paste OpenID4VP Request URL</Text>
+
+        <TextInput
+          style={styles.input}
+          value={requestUrl}
+          onChangeText={setRequestUrl}
+          multiline
+          placeholder="Paste OpenID4VP request URL here"
+          placeholderTextColor="#64748b"
+        />
+
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={handleParsePastedRequest}>
+          <Text style={styles.secondaryButtonText}>Parse Pasted Request</Text>
+        </TouchableOpacity>
+      </View>
+
       <TouchableOpacity
-        style={styles.secondaryButton}
-        onPress={handleCreateSignedVPToken}>
+        style={[styles.secondaryButton, !request && styles.disabledButton]}
+        onPress={handleCreateSignedVPToken}
+        disabled={!request}>
         <Text style={styles.secondaryButtonText}>Create Signed VP Token</Text>
       </TouchableOpacity>
 
       {request && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Parsed Verifier Request</Text>
+        <View style={styles.resultCard}>
+          <Text style={styles.sectionTitle}>Verifier Request</Text>
 
           <Text style={styles.label}>Client ID</Text>
           <Text style={styles.value}>{request.clientId}</Text>
@@ -97,8 +159,8 @@ export default function OpenID4VPScreen() {
       )}
 
       {vpToken && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Signed VP Token</Text>
+        <View style={styles.resultCard}>
+          <Text style={styles.sectionTitle}>Signed VP Token</Text>
 
           <Text style={styles.label}>Type</Text>
           <Text style={styles.value}>{vpToken.type}</Text>
@@ -110,18 +172,31 @@ export default function OpenID4VPScreen() {
           <Text style={styles.value}>{vpToken.verifier}</Text>
 
           <Text style={styles.label}>Credential ID</Text>
-          <Text style={styles.value}>{vpToken.credentialId}</Text>
+          <Text style={styles.value}>{sampleCredential.id}</Text>
 
-          <Text style={styles.label}>Signature</Text>
+          <Text style={styles.label}>Employee ID</Text>
+          <Text style={styles.value}>
+            {sampleCredential.credentialSubject.employeeId}
+          </Text>
+
+          <Text style={styles.label}>Proof Type</Text>
+          <Text style={styles.value}>{vpToken.proof.type}</Text>
+
+          <Text style={styles.label}>Key Alias / Test Key ID</Text>
+          <Text style={styles.value}>{vpToken.proof.keyAlias}</Text>
+
+          <Text style={styles.label}>Signature / Test Signature</Text>
           <Text style={styles.value}>{vpToken.proof.signature}</Text>
         </View>
       )}
 
-      <View style={styles.infoBox}>
+      <View style={styles.infoCard}>
         <Text style={styles.infoTitle}>OpenID4VP Wrapper</Text>
+
         <Text style={styles.infoText}>
-          This screen simulates OpenID4VP request handling. Later, the mock
-          verifier request can be replaced with a real verifier QR or deep link.
+          This screen demonstrates OpenID4VP request parsing and VP token
+          signing. The VP token is signed using the wallet key alias stored in
+          native secure storage.
         </Text>
       </View>
     </ScrollView>
@@ -130,84 +205,115 @@ export default function OpenID4VPScreen() {
 
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
-    padding: 24,
-    backgroundColor: '#F8FAFC',
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  content: {
+    padding: 20,
+    paddingBottom: 40,
   },
   title: {
     fontSize: 28,
     fontWeight: '800',
     color: '#111827',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   subtitle: {
     fontSize: 16,
-    color: '#475569',
-    marginBottom: 28,
     lineHeight: 24,
+    color: '#475569',
+    marginBottom: 24,
   },
-  button: {
-    backgroundColor: '#2563EB',
+  primaryButton: {
+    backgroundColor: '#2563eb',
     paddingVertical: 16,
     borderRadius: 12,
-    marginBottom: 16,
+    alignItems: 'center',
+    marginBottom: 14,
   },
-  buttonText: {
-    color: '#FFFFFF',
-    textAlign: 'center',
+  primaryButtonText: {
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '700',
   },
   secondaryButton: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#e2e8f0',
     paddingVertical: 16,
     borderRadius: 12,
-    marginBottom: 24,
+    alignItems: 'center',
+    marginBottom: 14,
   },
   secondaryButtonText: {
     color: '#111827',
-    textAlign: 'center',
     fontSize: 16,
     fontWeight: '700',
   },
-  card: {
-    backgroundColor: '#FFFFFF',
-    padding: 18,
-    borderRadius: 16,
-    marginBottom: 20,
+  disabledButton: {
+    opacity: 0.5,
   },
-  cardTitle: {
+  inputCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  input: {
+    minHeight: 90,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 10,
+    padding: 12,
+    color: '#111827',
+    fontSize: 14,
+    textAlignVertical: 'top',
+    marginTop: 10,
+    marginBottom: 14,
+    backgroundColor: '#f8fafc',
+  },
+  resultCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    padding: 16,
+    marginTop: 10,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  sectionTitle: {
     fontSize: 18,
     fontWeight: '800',
     color: '#111827',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   label: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#64748B',
+    color: '#475569',
     marginTop: 10,
   },
   value: {
     fontSize: 14,
     color: '#111827',
     marginTop: 4,
+    lineHeight: 20,
   },
-  infoBox: {
-    backgroundColor: '#EFF6FF',
-    padding: 18,
-    borderRadius: 16,
-    marginTop: 8,
+  infoCard: {
+    backgroundColor: '#eff6ff',
+    borderRadius: 14,
+    padding: 16,
+    marginTop: 10,
   },
   infoTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#1D4ED8',
-    marginBottom: 8,
+    color: '#1d4ed8',
+    marginBottom: 10,
   },
   infoText: {
     fontSize: 15,
-    color: '#1E3A8A',
     lineHeight: 23,
+    color: '#1e3a8a',
   },
 });

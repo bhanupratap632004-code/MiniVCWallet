@@ -1,76 +1,116 @@
 import React from 'react';
-import {View, Text, StyleSheet, ScrollView, TouchableOpacity} from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
-import {getCredential} from '../storage/credentialStorage';
-import {PixelPassService} from '../modules/pixelpass/PixelPassService';
+import {sampleCredential} from '../modules/credential/sampleCredential';
 import {FaceMatchService} from '../modules/faceMatch/FaceMatchService';
+import {PixelPassService} from '../modules/pixelpass/PixelPassService';
 
-export default function ShareCredentialScreen({navigation}: any) {
-  const credential = getCredential();
+export default function ShareCredentialScreen() {
   const faceStatus = FaceMatchService.getFaceMatchStatus();
 
-  if (!credential) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Share Credential</Text>
-        <Text style={styles.emptyText}>No credential found.</Text>
-      </View>
-    );
-  }
+  const handleContinueToShareQR = () => {
+    try {
+      const result = PixelPassService.encodeCredentialForQR(sampleCredential);
 
-  if (!faceStatus?.matched) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Face Match Required</Text>
-
-        <Text style={styles.subtitle}>
-          Please verify face before sharing this credential.
-        </Text>
-
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => navigation.navigate('FaceMatch')}>
-          <Text style={styles.buttonText}>Verify Face</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  const qrPayload = PixelPassService.encodeCredential(credential);
+      Alert.alert(
+        'QR Payload Created',
+        `Credential QR payload created successfully.\n\nPayload Preview:\n${result.qrPayload.substring(
+          0,
+          80,
+        )}...`,
+      );
+    } catch (error) {
+      console.log('Share QR error:', error);
+      Alert.alert('Error', 'Unable to create QR payload for sharing');
+    }
+  };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Share Credential</Text>
 
       <Text style={styles.subtitle}>
-        Face match verified. This QR code contains the encoded credential
-        payload.
+        Review your credential and continue to generate a QR payload for offline
+        or verifier-based sharing.
       </Text>
 
-      <View style={styles.qrCard}>
-        <QRCode value={qrPayload} size={230} />
-      </View>
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Credential Details</Text>
 
-      <View style={styles.infoCard}>
-        <Text style={styles.label}>Credential Type</Text>
-        <Text style={styles.value}>{credential.type[1]}</Text>
+        <Text style={styles.label}>Credential ID</Text>
+        <Text style={styles.value}>{sampleCredential.id}</Text>
 
-        <Text style={styles.label}>Holder</Text>
-        <Text style={styles.value}>{credential.credentialSubject.name}</Text>
+        <Text style={styles.label}>Holder DID</Text>
+        <Text style={styles.value}>
+          {sampleCredential.credentialSubject.id}
+        </Text>
+
+        <Text style={styles.label}>Name</Text>
+        <Text style={styles.value}>
+          {sampleCredential.credentialSubject.name}
+        </Text>
+
+        <Text style={styles.label}>Role</Text>
+        <Text style={styles.value}>
+          {sampleCredential.credentialSubject.role}
+        </Text>
+
+        <Text style={styles.label}>Organization</Text>
+        <Text style={styles.value}>
+          {sampleCredential.credentialSubject.organization}
+        </Text>
+
+        <Text style={styles.label}>Employee ID</Text>
+        <Text style={styles.value}>
+          {sampleCredential.credentialSubject.employeeId}
+        </Text>
 
         <Text style={styles.label}>Issuer</Text>
-        <Text style={styles.value}>{credential.issuer}</Text>
+        <Text style={styles.value}>{sampleCredential.issuer}</Text>
 
-        <Text style={styles.label}>Face Match Confidence</Text>
-        <Text style={styles.value}>{faceStatus.confidence}</Text>
+        <Text style={styles.label}>Issuance Date</Text>
+        <Text style={styles.value}>{sampleCredential.issuanceDate}</Text>
+
+        <Text style={styles.label}>Expiration Date</Text>
+        <Text style={styles.value}>{sampleCredential.expirationDate}</Text>
       </View>
 
-      <View style={styles.noteBox}>
-        <Text style={styles.noteTitle}>Secure Sharing Flow</Text>
-        <Text style={styles.noteText}>
-          Credential sharing is allowed only after face match verification. This
-          simulates holder authentication before sharing.
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Face Match Status</Text>
+
+        <Text style={styles.label}>Status</Text>
+        <Text style={styles.value}>
+          {faceStatus?.matched ? 'MATCHED' : 'NOT VERIFIED'}
+        </Text>
+
+        <Text style={styles.label}>Confidence</Text>
+        <Text style={styles.value}>
+          {faceStatus ? `${Math.round(faceStatus.confidence * 100)}%` : 'N/A'}
+        </Text>
+
+        <Text style={styles.label}>Verified At</Text>
+        <Text style={styles.value}>{faceStatus?.verifiedAt ?? 'N/A'}</Text>
+      </View>
+
+      <TouchableOpacity
+        style={styles.primaryButton}
+        onPress={handleContinueToShareQR}>
+        <Text style={styles.primaryButtonText}>Continue to Share QR</Text>
+      </TouchableOpacity>
+
+      <View style={styles.infoCard}>
+        <Text style={styles.infoTitle}>Step 8 Status</Text>
+
+        <Text style={styles.infoText}>
+          This step confirms the credential sharing pipeline: credential to
+          PixelPass payload to QR-ready encoded data.
         </Text>
       </View>
     </ScrollView>
@@ -79,80 +119,79 @@ export default function ShareCredentialScreen({navigation}: any) {
 
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
-    padding: 24,
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  content: {
+    padding: 20,
+    paddingBottom: 40,
   },
   title: {
-    alignSelf: 'flex-start',
-    fontSize: 26,
-    fontWeight: '700',
-    marginBottom: 8,
-    color: '#0F172A',
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 10,
   },
   subtitle: {
-    alignSelf: 'flex-start',
-    fontSize: 15,
+    fontSize: 16,
+    lineHeight: 24,
     color: '#475569',
     marginBottom: 24,
-    lineHeight: 21,
   },
-  qrCard: {
-    backgroundColor: '#FFFFFF',
-    padding: 22,
-    borderRadius: 18,
-    marginBottom: 24,
-  },
-  infoCard: {
-    alignSelf: 'stretch',
-    backgroundColor: '#FFFFFF',
-    padding: 16,
+  card: {
+    backgroundColor: '#ffffff',
     borderRadius: 14,
+    padding: 16,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 12,
   },
   label: {
     fontSize: 13,
-    color: '#64748B',
-    marginTop: 8,
-    marginBottom: 4,
+    fontWeight: '700',
+    color: '#475569',
+    marginTop: 10,
   },
   value: {
     fontSize: 14,
-    color: '#0F172A',
+    color: '#111827',
+    marginTop: 4,
+    lineHeight: 20,
   },
-  emptyText: {
-    color: '#64748B',
-    fontSize: 15,
-  },
-  button: {
-    alignSelf: 'stretch',
-    backgroundColor: '#2563EB',
-    padding: 16,
+  primaryButton: {
+    backgroundColor: '#2563eb',
+    paddingVertical: 16,
     borderRadius: 12,
-    marginTop: 12,
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 16,
   },
-  buttonText: {
-    color: '#FFFFFF',
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  noteBox: {
-    alignSelf: 'stretch',
-    backgroundColor: '#EFF6FF',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 40,
-  },
-  noteTitle: {
-    fontSize: 14,
+  primaryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
     fontWeight: '700',
-    color: '#1D4ED8',
-    marginBottom: 6,
   },
-  noteText: {
-    fontSize: 13,
-    color: '#1E3A8A',
-    lineHeight: 19,
+  infoCard: {
+    backgroundColor: '#eff6ff',
+    borderRadius: 14,
+    padding: 16,
+    marginTop: 8,
+  },
+  infoTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1d4ed8',
+    marginBottom: 10,
+  },
+  infoText: {
+    fontSize: 15,
+    lineHeight: 23,
+    color: '#1e3a8a',
   },
 });
