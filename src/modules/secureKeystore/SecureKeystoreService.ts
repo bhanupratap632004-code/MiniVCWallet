@@ -1,86 +1,93 @@
 import * as Keychain from 'react-native-keychain';
 
-export type WalletKeyPairResult = {
-  status: 'KEY_GENERATED';
+export type KeyGenerationResult = {
+  status: 'KEY_GENERATED' | 'KEY_ALREADY_EXISTS';
   keyAlias: string;
-  publicKey: string;
   createdAt: string;
 };
 
-export type WalletSignatureResult = {
+export type SignPayloadResult = {
   keyAlias: string;
   payload: string;
   signature: string;
   signedAt: string;
 };
 
-const WALLET_KEYCHAIN_SERVICE = 'mini-vc-wallet-secure-keystore';
-const WALLET_KEY_USERNAME = 'mini-vc-wallet-key';
-
-function createMockPublicKey(keyAlias: string): string {
-  return `mock_public_key_${keyAlias}`;
-}
-
-function createMockSignature(payload: string, keyAlias: string): string {
-  return `mock_signature_${payload}_${keyAlias}_${Date.now()}`;
-}
-
-async function saveWalletKeyAlias(keyAlias: string): Promise<void> {
-  await Keychain.setGenericPassword(WALLET_KEY_USERNAME, keyAlias, {
-    service: WALLET_KEYCHAIN_SERVICE,
-  });
-}
-
-async function getStoredWalletKeyAlias(): Promise<string | null> {
-  const credentials = await Keychain.getGenericPassword({
-    service: WALLET_KEYCHAIN_SERVICE,
-  });
-
-  if (!credentials) {
-    return null;
-  }
-
-  return credentials.password;
-}
+const WALLET_KEY_SERVICE = 'mini-vc-wallet-key-service';
+const WALLET_KEY_USERNAME = 'wallet-key-alias';
 
 export const SecureKeystoreService = {
-  async generateKeyPair(): Promise<WalletKeyPairResult> {
-    const existingKeyAlias = await getStoredWalletKeyAlias();
+  /**
+   * Generates a wallet key alias and stores it in native secure storage.
+   * iOS: Keychain
+   * Android: Encrypted secure storage through react-native-keychain
+   */
+  async generateKeyPair(): Promise<KeyGenerationResult> {
+    const existingKey = await Keychain.getGenericPassword({
+      service: WALLET_KEY_SERVICE,
+    });
 
-    const keyAlias = existingKeyAlias ?? `wallet-key-${Date.now()}`;
+    if (existingKey) {
+      return {
+        status: 'KEY_ALREADY_EXISTS',
+        keyAlias: existingKey.password,
+        createdAt: new Date().toISOString(),
+      };
+    }
 
-    await saveWalletKeyAlias(keyAlias);
+    const keyAlias = `wallet-key-${Date.now()}`;
+
+    await Keychain.setGenericPassword(WALLET_KEY_USERNAME, keyAlias, {
+      service: WALLET_KEY_SERVICE,
+    });
 
     return {
       status: 'KEY_GENERATED',
       keyAlias,
-      publicKey: createMockPublicKey(keyAlias),
       createdAt: new Date().toISOString(),
     };
   },
 
-  async getWalletKeyAlias(): Promise<string | null> {
-    return getStoredWalletKeyAlias();
+  /**
+   * Returns the stored wallet key alias.
+   * If no key exists, it creates one automatically.
+   */
+  async getWalletKeyAlias(): Promise<string> {
+    const existingKey = await Keychain.getGenericPassword({
+      service: WALLET_KEY_SERVICE,
+    });
+
+    if (existingKey) {
+      return existingKey.password;
+    }
+
+    const generatedKey = await this.generateKeyPair();
+    return generatedKey.keyAlias;
   },
 
-  async signPayload(payload: string): Promise<WalletSignatureResult> {
-    const keyAlias = await getStoredWalletKeyAlias();
-
-    if (!keyAlias) {
-      throw new Error('Wallet key pair is not generated');
-    }
+  /**
+   * Mock signing method.
+   * Real cryptographic signing can be added later.
+   */
+  async signPayload(payload: string): Promise<SignPayloadResult> {
+    const keyAlias = await this.getWalletKeyAlias();
+    const signedAt = new Date().toISOString();
 
     return {
       keyAlias,
       payload,
-      signature: createMockSignature(payload, keyAlias),
-      signedAt: new Date().toISOString(),
+      signature: `mock_signature_${payload}_${keyAlias}_${Date.now()}`,
+      signedAt,
     };
   },
 
+  /**
+   * Clears the stored wallet key.
+   * Useful for testing reset flow.
+   */
   async clearWalletKey(): Promise<void> {
     await Keychain.resetGenericPassword({
-      service: WALLET_KEYCHAIN_SERVICE,
+      service: WALLET_KEY_SERVICE,
     });
   },
 };
