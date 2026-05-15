@@ -1,15 +1,41 @@
 import {PixelPassService} from '../../src/modules/pixelpass/PixelPassService';
-import {sampleCredential} from '../../src/modules/credential/sampleCredential';
 
 describe('PixelPassService', () => {
-  it('encodes and decodes credential successfully', () => {
-    const encoded = PixelPassService.encodeCredential(sampleCredential);
-    const decoded = PixelPassService.decodeCredential(encoded);
+  const sampleCredential = {
+    id: 'urn:uuid:intern-credential-001',
+    type: ['VerifiableCredential', 'InternCredential'],
+    issuer: 'did:example:issuer001',
+    credentialSubject: {
+      id: 'did:example:intern001',
+      name: 'Demo Intern',
+      role: 'React Native Intern',
+    },
+  };
 
-    expect(decoded.id).toBe(sampleCredential.id);
-    expect(decoded.credentialSubject.name).toBe(
-      sampleCredential.credentialSubject.name,
-    );
-    expect(decoded.issuer).toBe(sampleCredential.issuer);
+  it('encodes credential into real PixelPass QR payload', () => {
+    const result = PixelPassService.encodeCredentialForQR(sampleCredential);
+
+    expect(result.qrPayload).toBeTruthy();
+    expect(result.originalPayload).toContain('Demo Intern');
+    expect(result.isRealPixelPass).toBe(true);
+  });
+
+  it('decodes real PixelPass QR payload back to credential data', () => {
+    const encoded = PixelPassService.encodeCredentialForQR(sampleCredential);
+    const decoded = PixelPassService.decodeCredentialFromQR(encoded.qrPayload);
+
+    expect(decoded.decodedPayload).toBeTruthy();
+    expect(decoded.decodedPayload).toContain('Demo Intern');
+    expect(decoded.isRealPixelPass).toBe(true);
+  });
+
+  it('parses decoded PixelPass payload into JSON', () => {
+    const encoded = PixelPassService.encodeCredentialForQR(sampleCredential);
+    const decoded = PixelPassService.decodeCredentialFromQR(encoded.qrPayload);
+
+    const parsed = PixelPassService.parseDecodedPayload(decoded.decodedPayload);
+
+    expect(parsed.credentialSubject.name).toBe('Demo Intern');
+    expect(parsed.credentialSubject.role).toBe('React Native Intern');
   });
 });

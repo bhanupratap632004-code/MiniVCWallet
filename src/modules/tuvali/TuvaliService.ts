@@ -1,9 +1,9 @@
-import {VerifiableCredential} from '../../types/credential';
 import {PixelPassService} from '../pixelpass/PixelPassService';
+import {VerifiableCredential} from '../../types/credential';
 
-export type TuvaliOfflineSession = {
+export type TuvaliSession = {
   sessionId: string;
-  status: 'CREATED' | 'PAYLOAD_READY' | 'TRANSFERRED' | 'RECEIVED';
+  status: 'CREATED' | 'CONNECTED' | 'COMPLETED';
   createdAt: string;
 };
 
@@ -11,40 +11,56 @@ export type TuvaliTransferPacket = {
   sessionId: string;
   channel: 'BLE_MOCK';
   payload: string;
-  transferredAt: string;
+  createdAt: string;
 };
 
-export class TuvaliService {
-  static createOfflineSession(): TuvaliOfflineSession {
+export type TuvaliReceivedCredential = {
+  status: 'RECEIVED';
+  credential: VerifiableCredential;
+  receivedAt: string;
+};
+
+export const TuvaliService = {
+  createOfflineSession(): TuvaliSession {
     return {
       sessionId: `tuvali-session-${Date.now()}`,
       status: 'CREATED',
       createdAt: new Date().toISOString(),
     };
-  }
+  },
 
-  static prepareCredentialPayload(
-    session: TuvaliOfflineSession,
+  connectSession(session: TuvaliSession): TuvaliSession {
+    return {
+      ...session,
+      status: 'CONNECTED',
+    };
+  },
+
+  prepareCredentialPayload(
+    session: TuvaliSession,
     credential: VerifiableCredential,
   ): TuvaliTransferPacket {
-    const payload = PixelPassService.encodeCredential(credential);
+    const encodedResult = PixelPassService.encodeCredentialForQR(credential);
 
     return {
       sessionId: session.sessionId,
       channel: 'BLE_MOCK',
-      payload,
-      transferredAt: new Date().toISOString(),
+      payload: encodedResult.qrPayload,
+      createdAt: new Date().toISOString(),
     };
-  }
+  },
 
-  static receiveCredentialPayload(packet: TuvaliTransferPacket) {
-    const credential = PixelPassService.decodeCredential(packet.payload);
+  receiveCredentialPayload(packet: TuvaliTransferPacket): TuvaliReceivedCredential {
+    const decodedResult = PixelPassService.decodeCredentialFromQR(packet.payload);
+
+    const parsedPayload = PixelPassService.parseDecodedPayload(
+      decodedResult.decodedPayload,
+    );
 
     return {
-      sessionId: packet.sessionId,
-      status: 'RECEIVED' as const,
+      status: 'RECEIVED',
+      credential: parsedPayload as VerifiableCredential,
       receivedAt: new Date().toISOString(),
-      credential,
     };
-  }
-}
+  },
+};
